@@ -132,6 +132,7 @@ const RolePlayConvesation = () => {
   const loadingText = `Thinking${'.'.repeat(loadingDots)}`; // Create loading text with dots
 
   const startRecording = async () => {
+    setHasVoiceInput(true);
     try {
       if (audioRecorderPlayer.isRecording) {
         await audioRecorderPlayer.stopRecorder();
