@@ -1,5 +1,11 @@
 import React, {useState, useEffect} from 'react';
-import {Text, View, TouchableOpacity, Alert} from 'react-native';
+import {
+  Text,
+  View,
+  TouchableOpacity,
+  Alert,
+  ImageBackground,
+} from 'react-native';
 import {useRoute} from '@react-navigation/native';
 import AudioRecorderPlayer from 'react-native-audio-recorder-player';
 import Sound from 'react-native-sound';
@@ -7,7 +13,9 @@ import RNFS from 'react-native-fs';
 import {Appearance} from 'react-native';
 import {SafeAreaView, StyleSheet} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ScrollView } from 'react-native-gesture-handler';
+import {ScrollView} from 'react-native-gesture-handler';
+import {Dimensions} from 'react-native';
+import Progress from './Progress';
 
 const audioRecorderPlayer = new AudioRecorderPlayer();
 
@@ -17,41 +25,90 @@ const Course = () => {
   const [comfortableLang, setComfortableLang] = useState('');
   const [targetLanguage, setTargetLanguage] = useState('');
   const [langlevel, setLevel] = useState('');
+  const [voiceInterface, setVoiceInterface] = useState('');
   const [emailValue, setEmail] = useState('');
   const [sound, setSound] = useState(null);
-  const [courseHistory, setCourseHistory] = useState('');
   const [responseText, setResponseText] = useState('');
   const [endOfcourse, setEndOfCourse] = useState(false);
   const [isStart, setIsStart] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [showNext, setShowNext] = useState(false);
+  const [loadingDots, setLoadingDots] = useState(1); // Track the number of dots
+  const [chapterTopics, setChapterTopics] = useState([]);
+  const [progressResponse, setProgressResponse] = useState('');
+  const [dataLoaded, setDataLoaded] = useState(false);
+  const [noCourseAvailable, setNoCourseAvailable] = useState(false);
   const route = useRoute();
   const emailOld = route.params?.email;
   const [isRecording, setIsRecording] = useState(false);
   const [recordSecs, setRecordSecs] = useState(0);
   const [recordTime, setRecordTime] = useState('00:00:00');
+
   useEffect(() => {
     const fetchDataCourse = async () => {
       const comfValue = await AsyncStorage.getItem('COMFLANGUAGE');
       const tarValue = await AsyncStorage.getItem('TARGETLANGUAGE');
       const level = await AsyncStorage.getItem('LEVEL');
       const emailHolder = await AsyncStorage.getItem('may');
+      const voice = await AsyncStorage.getItem('VOICE');
       setComfortableLang(comfValue);
       setTargetLanguage(tarValue);
       setLevel(level);
       setEmail(emailHolder);
+      setVoiceInterface(voice);
+      setDataLoaded(true);
     };
     fetchDataCourse();
   });
 
+  useEffect(() => {
+    if (!targetLanguage || !dataLoaded) return; // Only proceed if targetLanguage is not null and data is loaded
+
+    const getCourseDetails = async () => {
+      const formData = new FormData();
+      formData.append('tarLang', targetLanguage);
+      formData.append('email', emailOld);
+      try {
+        const response = await fetch(`http://127.0.0.1:5001/getCourseDetails`, {
+          method: 'POST',
+          body: formData,
+        });
+        const data = await response.json();
+        setChapterTopics(data);
+      } catch (error) {
+        console.error(error);
+        setNoCourseAvailable(true);
+      }
+    };
+
+    getCourseDetails();
+  }, [targetLanguage, dataLoaded]);
+
+  useEffect(() => {
+    let interval;
+
+    if (isLoading) {
+      // Start the interval when loading is true
+      interval = setInterval(() => {
+        setLoadingDots(prevDots => (prevDots % 3) + 1); // Cycle through 1, 2, 3
+      }, 1000);
+    } else {
+      // Clear the interval when loading is false
+      clearInterval(interval);
+    }
+
+    return () => clearInterval(interval); // Cleanup the interval on component unmount
+  }, [isLoading]);
+
+  const loadingText = `Preparing${'.'.repeat(loadingDots)}`; // Create loading text with dots
   const sendGenerateAudioRequest = async () => {
     setIsLoading(true);
-    console.log('emailOld:', emailOld);
     const formData = new FormData();
     formData.append('tarLang', targetLanguage);
     formData.append('comfLang', comfortableLang);
     formData.append('email', emailValue);
     formData.append('level', langlevel);
+    formData.append('voice', voiceInterface);
     if (Platform.OS === 'ios') {
       formData.append('platform', 'IOS');
       if (savedUri) {
@@ -76,15 +133,17 @@ const Course = () => {
         method: 'POST',
         body: formData,
       });
-      
-      if (audioResponse.llm_status === 'failed') {
+      const data = await audioResponse.json();
+      if (data.llm_status === 'failed') {
+        setIsLoading(false);
         Alert.alert(
           'Due to high demand we are facing some issue, please try again with a new recording',
         );
         return;
       }
-      const data = await audioResponse.json();
+
       setResponseText(data.content);
+      setProgressResponse(data.progress);
       if (data.endOfCourse === 'yes') {
         setEndOfCourse(true);
       }
@@ -92,7 +151,6 @@ const Course = () => {
         setIsStart(false);
         setShowNext(true);
       }
-      console.log(' end of course:', data.endOfCourse);
       const audioData = data.audio;
       if (data.audio != null) {
         const audioFilePath = await saveAudioToLocalFile(audioData);
@@ -105,6 +163,7 @@ const Course = () => {
       console.error(error);
     }
     setIsLoading(false);
+    setIsRecording(false);
     setSavedUri(null);
   };
 
@@ -126,7 +185,6 @@ const Course = () => {
       });
       setIsRecording(true);
       setSavedUri(result);
-      console.log('Path:', result);
     } catch (error) {
       console.log(error);
     }
@@ -138,13 +196,13 @@ const Course = () => {
       audioRecorderPlayer.removeRecordBackListener();
       setRecordSecs(0);
       setIsRecording(false);
+      sendGenerateAudioRequest();
     } catch (error) {
       console.log(error);
     }
   };
 
   if (sendAudio) {
-    console.log(savedUri);
     sendGenerateAudioRequest();
     setSendAudio(false);
   }
@@ -154,7 +212,6 @@ const Course = () => {
 
     try {
       await RNFS.writeFile(audioFilePath, base64Data, 'base64');
-      console.log('Audio saved to:', audioFilePath);
       return audioFilePath;
     } catch (error) {
       console.error('Error saving audio to local file:', error);
@@ -163,8 +220,6 @@ const Course = () => {
   };
 
   const playAudio = async filePath => {
-    console.log('Attempting to play sound:', filePath);
-
     if (sound) {
       sound.release();
     }
@@ -193,23 +248,30 @@ const Course = () => {
   };
 
   const colorScheme = Appearance.getColorScheme();
+  const screenWidth = Dimensions.get('window').width;
   const styles = StyleSheet.create({
     backgroundStyle: {
-      // flex: 1,
-      // justifyContent: 'center',
-      // alignItems: 'center',
-      backgroundColor: colorScheme === 'light' ? 'white' : 'black',
+      backgroundColor: colorScheme === 'light' ? '#D3D3D0' : '#E7CE9E',
     },
     button: {
-      backgroundColor: colorScheme === 'light' ? 'black' : 'white',
-      // paddingHorizontal: 20,
-      // paddingVertical: 10,
-      // borderRadius: 5,
-      // marginTop: 20,
+      backgroundColor: colorScheme === 'light' ? '#3359DC' : '#3359DC',
       paddingHorizontal: 20,
       paddingVertical: 10,
       borderRadius: 5,
-      marginTop: 20,
+    },
+    buttonLeft: {
+      backgroundColor: colorScheme === 'light' ? '#3359DC' : '#3359DC',
+      paddingHorizontal: 20,
+      paddingVertical: 10,
+      alignSelf: 'flex-start',
+      borderRadius: 5,
+    },
+    buttonRight: {
+      backgroundColor: colorScheme === 'light' ? '#3359DC' : '#3359DC',
+      // paddingHorizontal: 20,
+      paddingVertical: 10,
+      alignSelf: 'flex-end',
+      borderRadius: 5,
     },
     buttonText: {
       color: colorScheme === 'light' ? 'white' : 'black',
@@ -226,10 +288,14 @@ const Course = () => {
     loadingContainer: {
       justifyContent: 'center',
       alignItems: 'center',
+      borderRadius: 10,
+      backgroundColor: colorScheme === 'light' ? 'lightgrey' : 'lightgrey',
+      alignSelf: 'center'
     },
     loadingText: {
       fontSize: 20,
       fontWeight: 'bold',
+      paddingHorizontal: 15
     },
     textSection: {
       paddingHorizontal: 10,
@@ -237,58 +303,82 @@ const Course = () => {
       minWidth: 275,
       maxWidth: '80%',
       borderWidth: 1, // Add a border
-      borderColor: colorScheme === 'light' ? 'lightgray' : 'white', // Set the border color
+      borderColor: colorScheme === 'light' ? '#7F86F2' : 'white', // Set the border color
       borderRadius: 10, // Add this line for rounded edges
-      color: colorScheme === 'light' ? 'white' : 'black',
+      color: colorScheme === 'light' ? 'black' : 'black',
       alignSelf: 'flex-end',
-      backgroundColor: colorScheme === 'light' ? 'lightgray' : 'white',
+      backgroundColor: colorScheme === 'light' ? '#7F86F2' : 'white',
       marginBottom: 5,
-      fontSize:20,
-      alignItems: 'center'
+      fontSize: 20,
+      alignItems: 'center',
+    },
+    textDisplay: {
+      color: colorScheme === 'light' ? 'white' : 'black',
+      paddingLeft: 35,
+    },
+    image: {
+      flex: 1,
+      // justifyContent: 'center',
+      width: screenWidth,
     },
   });
 
   return (
     <SafeAreaView style={styles.backgroundStyle}>
-      <View style={{alignSelf: 'center', width: 275, height: '100%'}}>
-        {isStart === true && ( // only show start button at the start
-          <TouchableOpacity style={styles.button} onPress={goToNext}>
-            <Text style={styles.buttonText}>Start the course</Text>
-          </TouchableOpacity>
-        )}
-        <TouchableOpacity
-          style={styles.button}
-          onPress={() => {
-            isRecording ? stopRecording() : startRecording();
-          }}>
-          <Text style={styles.buttonText}>
-            {isRecording
-              ? `Stop Recording ${comfortableLang}`
-              : `Ask a question ${comfortableLang}`}
-          </Text>
-        </TouchableOpacity>
+      {/* <Background/> */}
 
-        {showNext && ( // Conditionally render Next button
-          <TouchableOpacity style={styles.button} onPress={goToNext}>
-            <Text style={styles.buttonText}>Next</Text>
-          </TouchableOpacity>
-        )}
-        {endOfcourse === true && ( // Conditionally render Next button
-          <Text>Course finito !!</Text>
-        )}
+      <View style={{height: '100%'}}>
+        <View style={{alignSelf: 'center', paddingTop:5}}>
+          {isStart === true && ( // only show start button at the start
+            <TouchableOpacity style={styles.button} onPress={goToNext}>
+              <Text style={styles.buttonText}>Start the course</Text>
+            </TouchableOpacity>
+          )}
+        </View>
         {isLoading && (
           // Show loading text or spinner while waiting for the response
           <View style={styles.loadingContainer}>
-            <Text style={styles.loadingText}>Loading...</Text>
+            <Text style={styles.loadingText}>{loadingText}</Text>
           </View>
         )}
-        {responseText && (
-        <ScrollView style={{paddingVertical:10}}>
-          <View style={styles.textSection}>
-          <Text style={{paddingLeft:35}}>{responseText}</Text>
-          </View>
+
+        <ScrollView>
+          <Progress
+            chapters={chapterTopics}
+            response={responseText}
+            progressResp={progressResponse}
+            targetLanguage={targetLanguage}
+            comfortableLang={comfortableLang}
+            // voice={voiceInterface}
+          />
         </ScrollView>
-        )}
+
+        <View
+          style={{
+            flexDirection: 'row',
+            paddingBottom: 64,
+            justifyContent: 'space-around',
+            backgroundColor: 'transparent',
+          }}>
+          {showNext && (
+            <TouchableOpacity
+              style={styles.button}
+              onPress={() => {
+                isRecording ? stopRecording() : startRecording();
+              }}>
+              <Text style={styles.buttonText}>
+                {isRecording
+                  ? `Stop Recording ${comfortableLang}`
+                  : `Ask a doubt ${comfortableLang}`}
+              </Text>
+            </TouchableOpacity>
+          )}
+          {showNext && ( // Conditionally render Next button
+            <TouchableOpacity style={styles.button} onPress={goToNext}>
+              <Text style={styles.buttonText}>Next</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
     </SafeAreaView>
   );

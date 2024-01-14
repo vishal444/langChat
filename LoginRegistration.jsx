@@ -11,6 +11,7 @@ import {useNavigation} from '@react-navigation/native'; // Import useNavigation
 import {Appearance} from 'react-native';
 import * as LocalAuthentication from 'expo-local-authentication';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Background from './Background';
 
 export default function LoginRegistration() {
   const [isLogin, setIsLogin] = useState(true);
@@ -76,7 +77,7 @@ export default function LoginRegistration() {
     input: {
       width: '100%',
       height: 40,
-      borderColor: 'gray',
+      borderColor: '#3359DC',
       borderWidth: 1,
       borderRadius: 5,
       marginBottom: 10,
@@ -84,7 +85,7 @@ export default function LoginRegistration() {
       color: colorScheme === 'light' ? 'black' : 'white', // Change text color to black
     },
     button: {
-      backgroundColor: colorScheme === 'light' ? 'black' : 'white', // Change background color to black
+      backgroundColor: colorScheme === 'light' ? '#3359DC' : '#3359DC', // Change background color to black
       paddingHorizontal: 20,
       paddingVertical: 10,
       borderRadius: 5,
@@ -97,7 +98,7 @@ export default function LoginRegistration() {
       textAlign: 'center',
     },
     toggleButton: {
-      color: colorScheme === 'light' ? 'black' : 'white', // Change text color to black
+      color: colorScheme === 'light' ? '#3359DC' : 'white', // Change text color to black
       marginTop: 20,
     },
     errorMessage: {
@@ -177,6 +178,7 @@ export default function LoginRegistration() {
   };
 
   return (
+    
     <View style={styles.container}>
       {!isLogin && ( // Only show the name input for registration
         <TextInput

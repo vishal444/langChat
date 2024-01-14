@@ -1,17 +1,13 @@
 import React, {useState} from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity
-} from 'react-native';
+import {View, Text, StyleSheet, TouchableOpacity} from 'react-native';
 import {Dropdown} from 'react-native-element-dropdown';
 import {useNavigation} from '@react-navigation/native'; // Import useNavigation
 import {useRoute} from '@react-navigation/native';
 import {SafeAreaView} from 'react-native-safe-area-context';
-import { Appearance } from 'react-native';
+import {Appearance, Alert} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ScrollView } from 'react-native-gesture-handler';
+import {ScrollView} from 'react-native-gesture-handler';
+import Background from './Background';
 
 const targetLang = [
   {label: 'English', value: 'English'},
@@ -50,26 +46,35 @@ const Start = () => {
   const email = route.params?.email;
 
   const navigation = useNavigation();
-   
+
   const handleOkButtonPress = async () => {
+    if (selectedComfLanguage === null || selectedTargetLanguage === null) {
+      // Display an alert if all values are null
+      Alert.alert('Please select comfortable and targeted language before saving.');
+      return;
+    }
     const formData = new FormData();
     formData.append('comfLang', selectedComfLanguage);
     formData.append('targetLang', selectedTargetLanguage);
     formData.append('level', selectedLevel);
     formData.append('email', email);
     formData.append('voice', selectedVoice);
-  
+
     try {
       const response = await fetch('http://127.0.0.1:5001/userData', {
         method: 'POST',
         body: formData,
       });
-  
+
       if (response.status === 200) {
         // Update AsyncStorage only if the response status is 200
         await AsyncStorage.setItem('COMFLANGUAGE', `${selectedComfLanguage}`);
-        await AsyncStorage.setItem('TARGETLANGUAGE', `${selectedTargetLanguage}`);
+        await AsyncStorage.setItem(
+          'TARGETLANGUAGE',
+          `${selectedTargetLanguage}`,
+        );
         await AsyncStorage.setItem('LEVEL', `${selectedLevel}`);
+        await AsyncStorage.setItem('VOICE', `${selectedVoice}`);
         // Redirect to the Home screen after successful registration
         navigation.navigate('Home', {
           email,
@@ -80,17 +85,20 @@ const Start = () => {
     } catch (error) {
       console.error('Fetch error:', error);
     }
+    setSelectedComfLanguage(null);
+    setSelectedTargetLanguage(null);
+    setSelectedLevel(null);
+    setSelectedVoice(null);
   };
-  
 
   const colorScheme = Appearance.getColorScheme();
   const styles = StyleSheet.create({
     backgroundStyle: {
       backgroundColor: colorScheme === 'light' ? 'white' : 'black',
-      height: '100%'
+      height: '100%',
     },
     button: {
-      backgroundColor: colorScheme === 'light' ? 'black' : 'white',
+      backgroundColor: colorScheme === 'light' ? '#3359DC' : '#3359DC',
       paddingHorizontal: 20,
       paddingVertical: 10,
       borderRadius: 5,
@@ -103,81 +111,113 @@ const Start = () => {
       textAlign: 'center',
     },
     displayText: {
-      color: colorScheme === 'light' ? 'black' : 'white',
+      color: colorScheme === 'light' ? 'black' : 'black',
       fontSize: 18,
       marginTop: 20,
       fontWeight: 'bold',
     },
+    container: {
+      paddingHorizontal: 20,
+      // paddingVertical: 2,
+      borderRadius: 10, // Add borderRadius for the container
+      backgroundColor: colorScheme === 'light' ? '#A6B4F2' : '#A6B4F2',
+      // marginVertical: 5,
+      marginBottom: 5,
+    },
   });
-  
+
   return (
     <SafeAreaView style={styles.backgroundStyle}>
-    <ScrollView>
-      <View >
-        <Text style={[styles.displayText, { paddingVertical: 30 }]}>Select your comfortable language</Text>
-        <Dropdown
-          data={comfortableLang}
-          search
-          searchPlaceholder="Search"
-          labelField="label"
-          valueField="value"
-          placeholder="Select language"
-          value={selectedComfLanguage}
-          onChange={item => setSelectedComfLanguage(item.value)}
-          itemTextStyle={{ color: colorScheme === 'light' ? 'black' : 'black' }}
-        />
+      <Background/>
+      <ScrollView>
+        <View style={{paddingHorizontal: 5, paddingTop: 10}}>
+          <View style={styles.container}>
+            <Text style={[styles.displayText, {paddingVertical: 20}]}>
+              Select your comfortable language
+            </Text>
+            <Dropdown
+              data={comfortableLang}
+              search
+              searchPlaceholder="Search"
+              labelField="label"
+              valueField="value"
+              placeholder="Select language"
+              value={selectedComfLanguage}
+              onChange={item => setSelectedComfLanguage(item.value)}
+              itemTextStyle={{
+                color: colorScheme === 'light' ? 'black' : 'black',
+              }}
+            />
+          </View>
         </View>
-        <View >
-        <Text style={[styles.displayText, { paddingVertical: 30 }]}>Select the language you want to learn</Text>
-        <Dropdown
-          data={targetLang}
-          search
-          searchPlaceholder="Search"
-          labelField="label"
-          valueField="value"
-          placeholder="Select language"
-          value={selectedTargetLanguage}
-          onChange={item => setSelectedTargetLanguage(item.value)}
-          itemTextStyle={{ color: colorScheme === 'light' ? 'black' : 'black' }}
-        />
+        <View style={{paddingHorizontal: 5}}>
+          <View style={styles.container}>
+            <Text style={[styles.displayText, {paddingVertical: 20}]}>
+              Select the language you want to learn
+            </Text>
+            <Dropdown
+              data={targetLang}
+              search
+              searchPlaceholder="Search"
+              labelField="label"
+              valueField="value"
+              placeholder="Select language"
+              value={selectedTargetLanguage}
+              onChange={item => setSelectedTargetLanguage(item.value)}
+              itemTextStyle={{
+                color: colorScheme === 'light' ? 'black' : 'black',
+              }}
+            />
+          </View>
         </View>
-        <View >
-        <Text style={[styles.displayText, { paddingVertical: 30 }]}>Select your current proficiency level</Text>
-        <Dropdown
-          data={level}
-          search
-          searchPlaceholder="Search"
-          labelField="label"
-          valueField="value"
-          placeholder="Select proficiency level"
-          value={selectedLevel}
-          onChange={item => setSelectedLevel(item.value)}
-          itemTextStyle={{ color: colorScheme === 'light' ? 'black' : 'black' }}
-        />
-      </View>
-      <View >
-        <Text style={[styles.displayText, { paddingVertical: 30 }]}>Select your preferred voice</Text>
-        <Dropdown
-          data={voice}
-          search
-          searchPlaceholder="Search"
-          labelField="label"
-          valueField="value"
-          placeholder="Select voice"
-          value={selectedVoice}
-          onChange={item => setSelectedVoice(item.value)}
-          itemTextStyle={{ color: colorScheme === 'light' ? 'black' : 'black' }}
-        />
-      </View>
-      <View style={{alignSelf: 'center', width: 150}}>
-      <TouchableOpacity style={styles.button} onPress={handleOkButtonPress}>
-        <Text style={styles.buttonText}>Ok</Text>
-      </TouchableOpacity>
-      </View>
+        <View style={{paddingHorizontal: 5}}>
+          <View style={styles.container}>
+            <Text style={[styles.displayText, {paddingVertical: 20}]}>
+              Select your current proficiency level
+            </Text>
+            <Dropdown
+              data={level}
+              search
+              searchPlaceholder="Search"
+              labelField="label"
+              valueField="value"
+              placeholder="Select proficiency level"
+              value={selectedLevel}
+              onChange={item => setSelectedLevel(item.value)}
+              itemTextStyle={{
+                color: colorScheme === 'light' ? 'black' : 'black',
+              }}
+            />
+          </View>
+        </View>
+        <View style={{paddingHorizontal: 5}}>
+          <View style={styles.container}>
+            <Text style={[styles.displayText, {paddingVertical: 20}]}>
+              Select your preferred voice
+            </Text>
+            <Dropdown
+              data={voice}
+              search
+              searchPlaceholder="Search"
+              labelField="label"
+              valueField="value"
+              placeholder="Select voice"
+              value={selectedVoice}
+              onChange={item => setSelectedVoice(item.value)}
+              itemTextStyle={{
+                color: colorScheme === 'light' ? 'black' : 'black',
+              }}
+            />
+          </View>
+        </View>
+        <View style={{alignSelf: 'center', width: 150}}>
+          <TouchableOpacity style={styles.button} onPress={handleOkButtonPress}>
+            <Text style={styles.buttonText}>Ok</Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
 };
-
 
 export default Start;

@@ -14,6 +14,8 @@ import {
   Alert,
 } from 'react-native';
 import {ScrollView} from 'react-native-gesture-handler';
+import Imagepath from './assets/Imagepath';
+import Background, {homeStyle} from './Background';
 
 const audioRecorderPlayer = new AudioRecorderPlayer();
 
@@ -32,25 +34,66 @@ const Chat = () => {
   const [targetLanguage, setTargetLanguage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [langlevel, setLevel] = useState('');
+  const [voiceInterface, setVoiceInterface] = useState('');
   const [userData, setUserData] = useState(null);
-  const [hasChatData, setHasChatData] = useState(false);
+  const [hasVoiceInput, setHasVoiceInput] = useState(false);
+  const [loadingDots, setLoadingDots] = useState(1); // Track the number of dots
   const route = useRoute();
   const email = route.params?.email;
 
   useEffect(() => {
     const fetchData = async () => {
-        const comfValue = await AsyncStorage.getItem('COMFLANGUAGE');
-        const tarValue = await AsyncStorage.getItem('TARGETLANGUAGE');
-        const level = await AsyncStorage.getItem('LEVEL');
-        const emailHolder = await AsyncStorage.getItem('may');
-        setComfortableLang(comfValue);
-        setTargetLanguage(tarValue);
-        setLevel(level);
-        setEmail(emailHolder);
+      const comfValue = await AsyncStorage.getItem('COMFLANGUAGE');
+      const tarValue = await AsyncStorage.getItem('TARGETLANGUAGE');
+      const level = await AsyncStorage.getItem('LEVEL');
+      const emailHolder = await AsyncStorage.getItem('may');
+      const voice = await AsyncStorage.getItem('VOICE');
+      setComfortableLang(comfValue);
+      setTargetLanguage(tarValue);
+      setLevel(level);
+      setVoiceInterface(voice);
+      setEmail(emailHolder);
     };
     fetchData();
   });
+  useEffect(() => {
+    const fetchChat = async () => {
+      try {
+        const chatDataRec = await fetch(
+          `http://127.0.0.1:5001/chatData?param=${email}`,
+          {
+            method: 'GET',
+          },
+        );
+        const textData = await chatDataRec.json();
+        setChatResult(textData);
+      } catch (error) {
+        console.error('Error fetching chat data:', error);
+      }
+    };
+    fetchChat();
+  }, []);
+
+  useEffect(() => {
+    let interval;
+
+    if (isLoading) {
+      // Start the interval when loading is true
+      interval = setInterval(() => {
+        setLoadingDots(prevDots => (prevDots % 3) + 1); // Cycle through 1, 2, 3
+      }, 1000);
+    } else {
+      // Clear the interval when loading is false
+      clearInterval(interval);
+    }
+
+    return () => clearInterval(interval); // Cleanup the interval on component unmount
+  }, [isLoading]);
+
+  const loadingText = `Thinking${'.'.repeat(loadingDots)}`; // Create loading text with dots
+
   const startComfRecording = async () => {
+    setHasVoiceInput(true);
     try {
       const path = Platform.select({
         ios: 'comfRecording.m4a',
@@ -71,6 +114,8 @@ const Chat = () => {
     }
   };
   const startTarRecording = async () => {
+    setHasVoiceInput(true);
+    setComfRecording(false);
     try {
       const path = Platform.select({
         ios: 'tarRecording.m4a',
@@ -99,7 +144,7 @@ const Chat = () => {
       setComfRecording(false);
       setTarRecording(false);
       setSendRequestAudio(true);
-      setHasChatData(true);
+      setHasVoiceInput(true);
     } catch (error) {
       console.log(error);
     }
@@ -107,12 +152,13 @@ const Chat = () => {
 
   const fetchAndPlayAudio = async () => {
     setIsLoading(true);
-    setHasChatData(false);
+    setHasVoiceInput(false);
     const formData = new FormData();
     formData.append('comfLang', comfortableLang);
     formData.append('targetLang', targetLanguage);
     formData.append('level', langlevel);
     formData.append('email', emailValue);
+    formData.append('voice', voiceInterface);
 
     if (Platform.OS === 'ios') {
       formData.append('platform', 'IOS');
@@ -157,8 +203,9 @@ const Chat = () => {
       const data = await response.json();
 
       if (data.llm_status === 'failed') {
+        setIsLoading(false);
         Alert.alert(
-          'Due to high demand we are facing some issue, please try again with a new recording',
+          'Due to high demand we are facing some issues, please try again with a new recording',
         );
         return;
       }
@@ -183,6 +230,8 @@ const Chat = () => {
     setIsLoading(false);
     setSavedComfUri(null);
     setSavedTarUri(null);
+    setComfRecording(false);
+    setTarRecording(false);
   };
 
   const saveAudioToLocalFile = async (base64Data, index) => {
@@ -227,14 +276,21 @@ const Chat = () => {
     });
     setSound(newSound);
   };
-  const handlePress = () => {
-    if (hasChatData) {
+  const handlePress = async () => {
+    await stopRecording();
+    if (hasVoiceInput) {
       fetchAndPlayAudio();
     } else {
       Alert.alert('There is no input data');
     }
   };
   const colorScheme = Appearance.getColorScheme();
+  let imageSource;
+  if (colorScheme === 'light') {
+    imageSource = Imagepath.icArrowDark;
+  } else if (colorScheme === 'dark') {
+    imageSource = Imagepath.icArrowDark; // replace with your dark image
+  }
   const styles = StyleSheet.create({
     backgroundStyle: {
       backgroundColor: colorScheme === 'light' ? 'white' : 'black',
@@ -246,8 +302,17 @@ const Chat = () => {
       borderRadius: 5,
       marginTop: 20,
     },
+    responseButton: {
+      backgroundColor: colorScheme === 'light' ? 'white' : 'white', // Set the background color to black
+      justifyContent: 'center',
+      alignItems: 'center',
+      width: 50,
+      height: 50,
+      borderRadius: 50,
+      marginTop: 10,
+    },
     comfButton: {
-      backgroundColor: colorScheme === 'light' ? 'black' : 'white',
+      backgroundColor: colorScheme === 'light' ? '#3359DC' : '#3359DC',
       paddingHorizontal: 20,
       paddingVertical: 10,
       borderRadius: 5,
@@ -256,7 +321,7 @@ const Chat = () => {
     },
 
     tarButton: {
-      backgroundColor: colorScheme === 'light' ? 'black' : 'white',
+      backgroundColor: colorScheme === 'light' ? '#3359DC' : '#3359DC',
       paddingHorizontal: 20,
       paddingVertical: 10,
       borderRadius: 5,
@@ -273,10 +338,10 @@ const Chat = () => {
       paddingVertical: 10,
       maxWidth: '80%',
       borderWidth: 1, // Add a border
-      borderColor: colorScheme === 'light' ? 'lightgray' : 'white', // Set the border color
+      borderColor: colorScheme === 'light' ? '#7F86F2' : 'white', // Set the border color
       borderRadius: 10, // Add this line for rounded edges
       alignSelf: 'flex-start',
-      backgroundColor: colorScheme === 'light' ? 'lightgray' : 'white',
+      backgroundColor: colorScheme === 'light' ? '#7F86F2' : 'white',
       color: colorScheme === 'light' ? 'white' : 'black',
       marginBottom: 5,
     },
@@ -285,17 +350,17 @@ const Chat = () => {
       paddingVertical: 5,
       maxWidth: '80%',
       borderWidth: 1, // Add a border
-      borderColor: colorScheme === 'light' ? 'lightgray' : 'white', // Set the border color
+      borderColor: colorScheme === 'light' ? '#7F86F2' : 'white', // Set the border color
       borderRadius: 10, // Add this line for rounded edges
       color: colorScheme === 'light' ? 'white' : 'black',
       alignSelf: 'flex-end',
-      backgroundColor: colorScheme === 'light' ? 'lightgray' : 'white',
+      backgroundColor: colorScheme === 'light' ? '#7F86F2' : 'white',
       marginBottom: 5,
     },
     chatView: {
       paddingVertical: 10,
       borderRadius: 10,
-      paddingBottom:100 
+      paddingBottom: 100,
     },
     concatenatedChat: {
       color: colorScheme === 'light' ? 'white' : 'black',
@@ -306,64 +371,72 @@ const Chat = () => {
     loadingContainer: {
       justifyContent: 'center',
       alignItems: 'center',
+      borderRadius: 10,
+      backgroundColor: colorScheme === 'light' ? 'lightgrey' : 'lightgrey',
+      alignSelf: 'center'
     },
     loadingText: {
       fontSize: 20,
       fontWeight: 'bold',
+      paddingHorizontal: 15
     },
   });
   return (
     <SafeAreaView style={styles.backgroundStyle}>
-      <StatusBar />
-      <View>
-        <View style={{flexDirection: 'row', justifyContent: 'center'}}>
-          <TouchableOpacity
-            id="comfButton"
-            style={styles.comfButton}
-            onPress={() =>
-              isComfRecording ? stopRecording() : startComfRecording()
-            }>
-            <Text style={styles.buttonText}>
-              {isComfRecording
-                ? `Stop \n${comfortableLang}`
-                : `Speak \n${comfortableLang}`}
-            </Text>
-            {/* <Image
-              source={require('./assets/pinterest_black.jpg')}
-              style={{width: 50, height: 50}}
-            /> */}
-          </TouchableOpacity>
-          {comfortableLang !== targetLanguage && (
-            <TouchableOpacity
-              id="tarButton"
-              style={styles.tarButton}
-              onPress={() =>
-                isTarRecording ? stopRecording() : startTarRecording()
-              }>
-              <Text style={styles.buttonText}>
-                {isTarRecording
-                  ? `Stop \n${targetLanguage}`
-                  : `Speak \n${targetLanguage}`}
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
-        <View style={{alignSelf: 'center', width: 150}}>
-          <TouchableOpacity
-            id="respButton"
-            style={styles.button}
-            onPress={handlePress}>
-            <Text style={styles.buttonText}>Get Response</Text>
-          </TouchableOpacity>
+      <View style={{height:'100%'}}>
+        <Background />
+        <View style={{paddingHorizontal: 5, paddingTop:5}}>
+          <View style={homeStyle.topRectangle}>
+            <View
+              style={{
+                flexDirection: 'row',justifyContent: 'center'
+              }}>
+              <TouchableOpacity
+                id="comfButton"
+                style={styles.comfButton}
+                onPress={() =>
+                  isComfRecording ? stopRecording() : startComfRecording()
+                }>
+                <Text style={styles.buttonText}>
+                  {isComfRecording
+                    ? `Stop \n${comfortableLang}`
+                    : `Speak \n${comfortableLang}`}
+                </Text>
+              </TouchableOpacity>
+              {comfortableLang !== targetLanguage && (
+                <TouchableOpacity
+                  id="tarButton"
+                  style={styles.tarButton}
+                  onPress={() =>
+                    isTarRecording ? stopRecording() : startTarRecording()
+                  }>
+                  <Text style={styles.buttonText}>
+                    {isTarRecording
+                      ? `Stop \n${targetLanguage}`
+                      : `Speak \n${targetLanguage}`}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+            <View style={{alignSelf: 'center', width: 60}}>
+              <TouchableOpacity
+                id="respButton"
+                style={styles.responseButton}
+                onPress={handlePress}>
+                <Image source={imageSource} style={{width: 50, height: 50}} />
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
         {isLoading && (
           // Show loading text or spinner while waiting for the response
           <View style={styles.loadingContainer}>
-            <Text style={styles.loadingText}>Loading...</Text>
+            <Text style={styles.loadingText}>{loadingText}</Text>
           </View>
         )}
+
         <View style={styles.chatView}>
-          <ScrollView style={{height: '80%'}}>
+          <ScrollView style={{height:'73%', paddingBottom:64}}>
             {chatResult &&
               chatResult.chatData.map((chat, index) => (
                 <View key={index}>
